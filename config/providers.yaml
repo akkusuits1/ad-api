@@ -1,0 +1,34 @@
+# Phase 1 stub config. Each entry's `url` is a placeholder that
+# proves the popup flow works. In Phase 2+ these point at real
+# rewarded-ad URLs from each provider.
+#
+# To run the game end-to-end today, no edits are needed. To
+# productionize, replace each `url` with the real rewarded-ad URL
+# from the provider dashboard.
+
+apps:
+  pulsator:
+    providers: [admob, unity, playwire]
+    reward:
+      type: hint
+      amount: 1
+  othergame:
+    providers: [admob, playwire]
+    reward:
+      type: coin
+      amount: 10
+
+providers:
+  admob:
+    testMode: true
+    adUnitId: ""           # fill in Phase 2 from apps.admob.com
+  unity:
+    testMode: true
+    gameId: ""             # fill in Phase 3 from dashboard.unity3d.com
+    placementId: rewardedVideo
+  playwire:
+    testMode: true
+    appId: ""              # waiting on user account
+
+sessionTtlMs: 600000      # 10 min
+minWatchMs: 5000          # claim must wait 5s after start

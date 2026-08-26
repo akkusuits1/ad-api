@@ -1,0 +1,26 @@
+# Render blueprint. Linked from Render dashboard when creating the
+# web service. Free tier Java 17 environment.
+
+services:
+  - type: web
+    name: ad-api
+    runtime: java
+    plan: free
+    buildCommand: ./gradlew shadowJar
+    startCommand: java -jar build/libs/ad-api-all.jar
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PROVIDER_CONFIG_PATH
+        value: config/providers.yaml
+      # Add these when secrets are available:
+      # - key: REDIS_URL
+      #   sync: false          # marked secret in Render UI
+      # - key: ADMOB_AD_UNIT_ID
+      #   sync: false
+      # - key: UNITY_GAME_ID
+      #   sync: false
+      # - key: PLAYWIRE_APP_ID
+      #   sync: false
+    healthCheckPath: /health
+    autoDeploy: true
