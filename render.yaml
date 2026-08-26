@@ -1,13 +1,13 @@
 # Render blueprint. Linked from Render dashboard when creating the
-# web service. Free tier Java 17 environment.
+# web service. Free tier, Docker runtime, multi-stage build via Dockerfile.
 
 services:
   - type: web
     name: ad-api
-    runtime: java
+    runtime: docker
     plan: free
-    buildCommand: ./gradlew shadowJar
-    startCommand: java -jar build/libs/ad-api-all.jar
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
       - key: PORT
         value: 10000
