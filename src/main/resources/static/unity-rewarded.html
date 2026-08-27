@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity Rewarded Ad</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            height:100vh; background:#0d1117; color:#e6edf3; font-family:system-ui,sans-serif;
+        }
+        #status { font-size:18px; margin-bottom:24px; }
+        #ad-container { width:100%; max-width:640px; aspect-ratio:16/9; background:#161b22;
+                        border:1px solid #30363d; border-radius:8px; display:flex;
+                        align-items:center; justify-content:center; overflow:hidden; }
+        .spinner { width:32px; height:32px; border:3px solid #30363d;
+                   border-top-color:#58a6ff; border-radius:50%;
+                   animation:spin .8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        #error { color:#f85149; display:none; margin-top:12px; }
+        button#fallback {
+            display:none; margin-top:16px; padding:10px 24px;
+            background:#238636; color:#fff; border:none; border-radius:6px;
+            font-size:14px; cursor:pointer;
+        }
+        button#fallback:hover { background:#2ea043; }
+    </style>
+</head>
+<body>
+    <div id="status">Loading ad...</div>
+    <div id="ad-container"><div class="spinner" id="spinner"></div></div>
+    <div id="error"></div>
+    <button id="fallback">Continue</button>
+
+    <script>
+        // Parse query params: gameId, placementId, app, placement, token
+        const params = new URLSearchParams(window.location.search);
+        const gameId = params.get('gameId');
+        const placementId = params.get('placementId') || 'rewardedVideo';
+        const token = params.get('token');
+        const app = params.get('app');
+        const placement = params.get('placement');
+
+        const status = document.getElementById('status');
+        const container = document.getElementById('ad-container');
+        const spinner = document.getElementById('spinner');
+        const errorEl = document.getElementById('error');
+        const fallbackBtn = document.getElementById('fallback');
+
+        function notifyOpener(type) {
+            if (window.opener) {
+                window.opener.postMessage({ type, token, app, placement, provider: 'unity' }, '*');
+            }
+        }
+
+        function showError(msg) {
+            status.textContent = 'Ad unavailable';
+            spinner.style.display = 'none';
+            errorEl.textContent = msg;
+            errorEl.style.display = 'block';
+            fallbackBtn.style.display = 'inline-block';
+            notifyOpener('ad-error');
+        }
+
+        function showSuccess() {
+            status.textContent = 'Reward granted!';
+            spinner.style.display = 'none';
+            container.innerHTML = '<div style="color:#3fb950;font-size:48px">&#10003;</div>';
+            notifyOpener('ad-complete');
+            // Close popup after brief delay
+            setTimeout(() => window.close(), 2000);
+        }
+
+        if (!gameId) {
+            showError('Missing gameId parameter');
+        } else {
+            // Load Unity Ads SDK
+            const script = document.createElement('script');
+            script.src = 'https://webads.unityads.unity3d.com/loader.js';
+            script.async = true;
+            script.onload = () => initUnityAds();
+            script.onerror = () => showError('Failed to load Unity Ads SDK');
+            document.head.appendChild(script);
+
+            function initUnityAds() {
+                if (typeof unityAds === 'undefined') {
+                    showError('Unity Ads SDK not available');
+                    return;
+                }
+                unityAds.init(gameId, () => {
+                    // SDK initialized — request rewarded ad
+                    unityAds.getRewardedAd(placementId, (ad) => {
+                        if (!ad) {
+                            showError('No ad available for this placement');
+                            return;
+                        }
+                        ad.on('reward', () => showSuccess());
+                        ad.on('error', (err) => showError('Ad error: ' + (err || 'unknown')));
+                        ad.on('close', () => {
+                            // If close without reward, treat as error
+                            status.textContent = 'Ad closed';
+                            notifyOpener('ad-closed');
+                            setTimeout(() => window.close(), 1500);
+                        });
+                        ad.show();
+                    }, (err) => showError('Could not load ad: ' + (err || 'unknown')));
+                }, (err) => showError('Unity Ads init failed: ' + (err || 'unknown')));
+            }
+        }
+
+        fallbackBtn.addEventListener('click', () => {
+            notifyOpener('ad-fallback');
+            window.close();
+        });
+
+        // Timeout — if nothing happens in 15s, show fallback
+        setTimeout(() => {
+            if (spinner.style.display !== 'none') {
+                showError('Ad timed out');
+            }
+        }, 15000);
+    </script>
+</body>
+</html>

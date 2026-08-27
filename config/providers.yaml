@@ -24,7 +24,7 @@ providers:
     adUnitId: ""           # fill in Phase 2 from apps.admob.com
   unity:
     testMode: true
-    gameId: ""             # fill in Phase 3 from dashboard.unity3d.com
+    gameId: "800359755"
     placementId: rewardedVideo
   playwire:
     testMode: true

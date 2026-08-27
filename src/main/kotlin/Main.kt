@@ -13,6 +13,7 @@ import com.pulsator.ads.api.startHandler
 import com.pulsator.ads.config.AppConfig
 import com.pulsator.ads.providers.ProviderRouter
 import com.pulsator.ads.providers.StubProvider
+import com.pulsator.ads.providers.UnityProvider
 import com.pulsator.ads.session.InMemoryStore
 import com.pulsator.ads.session.SessionStore
 import io.ktor.http.HttpHeaders
@@ -34,7 +35,11 @@ fun main() {
     val router = ProviderRouter(
         listOf(
             StubProvider("admob",    "https://example.com/admob-rewarded"),
-            StubProvider("unity",    "https://example.com/unity-rewarded"),
+            UnityProvider(
+                hostedPageUrl = "https://pulsator-ads.netlify.app/unity-rewarded.html",
+                gameId = "800359755",
+                placementId = "rewardedVideo"
+            ),
             StubProvider("playwire", "https://example.com/playwire-rewarded")
         )
     )
