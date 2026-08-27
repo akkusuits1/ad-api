@@ -34,14 +34,12 @@ fun main() {
     // Replace these with real AdMob/Unity/Playwire providers in Phase 2/3.
     val router = ProviderRouter(
         listOf(
-            StubProvider("admob",    "https://example.com/admob-rewarded"),
             UnityProvider(
                 hostedPageUrl = "https://pulsator.netlify.app/unity-rewarded.html",
                 gameId = "800359755",
                 interstitialPlacementId = "Interstitial_Android",
                 rewardedPlacementId = "Rewarded_Android"
-            ),
-            StubProvider("playwire", "https://example.com/playwire-rewarded")
+            )
         )
     )
     val store: SessionStore = InMemoryStore()
