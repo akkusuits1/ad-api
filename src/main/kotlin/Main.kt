@@ -36,7 +36,7 @@ fun main() {
         listOf(
             StubProvider("admob",    "https://example.com/admob-rewarded"),
             UnityProvider(
-                hostedPageUrl = "https://pulsator-ads.netlify.app/unity-rewarded.html",
+                hostedPageUrl = "https://pulsator.netlify.app/unity-rewarded.html",
                 gameId = "800359755",
                 interstitialPlacementId = "Interstitial_Android",
                 rewardedPlacementId = "Rewarded_Android"
