@@ -5,17 +5,21 @@
 package com.pulsator.ads.providers
 
 import java.util.UUID
+import kotlin.random.Random
 
 data class UnityProvider(
     override val name: String = "unity",
     private val hostedPageUrl: String,
     private val gameId: String,
-    private val placementId: String
+    private val interstitialPlacementId: String = "Interstitial_Android",
+    private val rewardedPlacementId: String = "Rewarded_Android"
 ) : Provider {
 
     override suspend fun requestAd(app: String, placement: String, userId: String): AdResult {
         val token = UUID.randomUUID().toString()
-        val url = "$hostedPageUrl?gameId=$gameId&placementId=$placementId&app=$app&placement=$placement&token=$token"
+        // 20% chance for Rewarded_Android, 80% for Interstitial_Android
+        val selectedPlacementId = if (Random.nextInt(5) == 0) rewardedPlacementId else interstitialPlacementId
+        val url = "$hostedPageUrl?gameId=$gameId&placementId=$selectedPlacementId&app=$app&placement=$placement&token=$token"
         return AdResult(adUrl = url, provider = name, token = token)
     }
 }

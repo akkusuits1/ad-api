@@ -38,7 +38,8 @@ fun main() {
             UnityProvider(
                 hostedPageUrl = "https://pulsator-ads.netlify.app/unity-rewarded.html",
                 gameId = "800359755",
-                placementId = "rewardedVideo"
+                interstitialPlacementId = "Interstitial_Android",
+                rewardedPlacementId = "Rewarded_Android"
             ),
             StubProvider("playwire", "https://example.com/playwire-rewarded")
         )
