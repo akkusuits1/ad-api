@@ -1,0 +1,1749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="color-scheme" content="dark light" />
+<title>PULSATOR — Dual Mode Game</title>
+<style>
+/* ============================================================
+   THEME TOKENS
+   ============================================================ */
+:root{
+  --bg:#0b0c10;
+  --bg-glow:#121a24;
+  --surface:#1f2833;
+  --surface-2:#151b23;
+  --line:#243040;
+  --text:#e8f1f8;
+  --muted:#7d8b9c;
+  --accent:#66fcf1;      /* LIGHT / CONNECT accent (neon cyan) */
+  --accent-2:#45a29e;
+  --accent-soft:rgba(102,252,241,.10);
+}
+/* DARK / DISCONNECT mode repaints the chrome in warning magenta.
+   Note: applyRandomTheme() also writes --accent/--accent-2/--accent-soft
+   inline on <body>, which wins over these; they remain the fallback. */
+body.mode-dark{
+  --accent:#ff2e7e;
+  --accent-2:#8b2f57;
+  --accent-soft:rgba(255,46,126,.10);
+}
+/* App-level LIGHT appearance. Orthogonal to the game's LIGHT/DARK
+   *ruleset* — this only swaps the surface/text palette. */
+body.light-mode{
+  --bg:#eaf0f6;
+  --bg-glow:#ffffff;
+  --surface:#ffffff;
+  --surface-2:#f4f8fc;
+  --line:#c6d4e3;
+  --text:#101a24;
+  --muted:#5d6d80;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:radial-gradient(1100px 760px at 50% -12%, var(--bg-glow) 0%, var(--bg) 62%);
+  color:var(--text);
+  transition:background-color .4s,color .4s;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ============================================================
+   HEADER / HUD
+   ============================================================ */
+header{
+  flex:0 0 auto;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;
+  border-bottom:1px solid var(--accent-soft);
+  background:linear-gradient(180deg,rgba(31,40,51,.7),rgba(31,40,51,0));
+  box-shadow:0 1px 0 var(--accent),0 4px 18px -8px var(--accent-soft);
+  transition:border-color .4s,box-shadow .4s;
+}
+header .icon-btn{order:2}
+header .icon-btn:first-of-type{margin-left:auto}
+.brand{
+  order:0;
+  margin-right:auto;
+  font-size:clamp(22px,6vw,30px);
+  font-weight:800;letter-spacing:.28em;
+  color:var(--accent);
+  text-shadow:0 0 10px var(--accent-soft),0 0 24px var(--accent-soft);
+  animation:brandPulse 1.8s ease-in-out infinite;
+}
+@keyframes brandPulse{
+  0%,100%{
+    text-shadow:0 0 8px var(--accent-soft),0 0 14px var(--accent-soft);
+    transform:scale(1);
+  }
+  50%{
+    text-shadow:0 0 14px var(--accent),0 0 32px var(--accent),0 0 48px var(--accent-soft);
+    transform:scale(1.04);
+  }
+}
+.hud{display:flex;flex-direction:column;line-height:1.25;margin-left:auto;text-align:right}
+.hud .lvl{font-size:14px;font-weight:700;letter-spacing:.12em}
+.hud .grp{font-size:10px;letter-spacing:.14em;color:var(--muted)}
+
+/* ============================================================
+   STATS PANEL (collapsible, under header)
+   Holds the running best / grid size / tap count and the active
+   ruleset goal. Player can expand or collapse it.
+   ============================================================ */
+.stats{
+  flex:0 0 auto;
+  border-bottom:1px solid var(--accent-soft);
+  background:rgba(31,40,51,.25);
+  box-shadow:inset 0 1px 0 var(--accent),0 4px 18px -10px var(--accent-soft);
+  transition:border-color .4s,box-shadow .4s;
+}
+.stats-head{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 12px;
+  cursor:pointer;
+  user-select:none;
+  font-size:10px;letter-spacing:.14em;
+  color:var(--muted);
+}
+.stats-head .caret{
+  display:inline-block;
+  transition:transform .18s;
+  font-size:9px;
+}
+.stats.collapsed .stats-head .caret{transform:rotate(-90deg)}
+.stats-body{
+  padding:0 12px 10px 12px;
+  font-size:11px;letter-spacing:.1em;
+  color:var(--text);
+  display:flex;flex-direction:column;gap:8px;
+}
+.stats.collapsed .stats-rest{display:none}
+.stats-rest{
+  display:flex;flex-direction:column;gap:8px;
+}
+.stats-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px 10px;
+}
+.stats-grid .cell{
+  display:flex;flex-direction:column;gap:2px;
+  padding:6px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:rgba(0,0,0,.18);
+  min-width:0;
+}
+.stats-grid .cell-wide{grid-column:1 / -1}
+.stats-grid .cell-label{
+  font-size:9px;letter-spacing:.16em;
+  color:var(--muted);
+}
+.stats-grid .cell-value{
+  font-size:12px;font-weight:700;letter-spacing:.1em;
+  color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.stats-body .goal{
+  font-size:10px;letter-spacing:.12em;color:var(--muted);line-height:1.4;
+  padding:2px 2px 0 2px;
+}
+
+/* ============================================================
+   CONTROL BAR
+   ============================================================ */
+.bar{
+  flex:0 0 auto;
+  display:flex;align-items:center;gap:8px;
+  padding:8px 12px;
+  border-bottom:1px solid var(--line);
+  background:rgba(31,40,51,.35);
+}
+.bar button{
+  flex:1 1 0;
+  min-width:0;
+  text-align:center;
+  padding:9px 6px;
+}
+
+button{
+  font:inherit;font-size:11px;letter-spacing:.1em;
+  color:var(--text);
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:8px 11px;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:border-color .18s,background .18s,color .18s,transform .08s;
+}
+button:hover{border-color:var(--accent-2)}
+button:active{transform:scale(.95)}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* ============================================================
+   STAGE / CANVAS
+   ============================================================ */
+.stage{
+  flex:1 1 auto;
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+  min-height:0;              /* lets the flex child shrink instead of overflowing */
+  padding:12px;
+}
+canvas{
+  display:block;
+  border-radius:14px;
+  background:
+    linear-gradient(180deg,rgba(31,40,51,.55),rgba(21,27,35,.55));
+  border:2px solid var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent-soft) inset,
+    0 0 18px var(--accent-soft),
+    0 0 36px var(--accent-soft),
+    0 18px 60px rgba(0,0,0,.55);
+  animation:borderPulse 2.2s ease-in-out infinite;
+  touch-action:none;         /* we handle pointer input ourselves */
+}
+@keyframes borderPulse{
+  0%,100%{
+    border-color:var(--accent);
+    box-shadow:
+      0 0 0 1px var(--accent-soft) inset,
+      0 0 14px var(--accent-soft),
+      0 0 28px var(--accent-soft),
+      0 18px 60px rgba(0,0,0,.55);
+  }
+  50%{
+    border-color:var(--accent);
+    box-shadow:
+      0 0 0 1px var(--accent) inset,
+      0 0 26px var(--accent),
+      0 0 52px var(--accent),
+      0 18px 60px rgba(0,0,0,.55);
+  }
+}
+
+/* ============================================================
+   STATUS FOOTER
+   ============================================================ */
+footer{
+  flex:0 0 auto;
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;
+  border-top:1px solid var(--accent-soft);
+  box-shadow:0 -1px 0 var(--accent),0 -4px 18px -8px var(--accent-soft);
+  font-size:10px;letter-spacing:.13em;color:var(--muted);
+  transition:border-color .4s,box-shadow .4s;
+}
+#goal{color:var(--text);opacity:.8}
+#best{margin-left:auto;white-space:nowrap}
+
+/* ============================================================
+   WIN BANNER (overlays the stage, non-blocking)
+   ============================================================ */
+.banner{
+  position:absolute;left:50%;top:14px;transform:translate(-50%,-140%);
+  padding:9px 16px;border-radius:999px;
+  background:var(--accent-soft);
+  border:1px solid var(--accent-2);
+  color:var(--accent);
+  font-size:11px;letter-spacing:.2em;font-weight:700;
+  pointer-events:none;
+  opacity:0;
+  transition:transform .38s cubic-bezier(.2,1.5,.4,1),opacity .38s;
+  text-shadow:0 0 14px var(--accent-soft);
+  z-index:5;
+}
+.banner.show{transform:translate(-50%,0);opacity:1}
+
+/* ============================================================
+   OVERLAY / MODAL LAYER SYSTEM
+   Every layer is hidden with opacity + pointer-events so it can
+   transition; `.active` is the single switch that reveals it.
+   ============================================================ */
+.overlay{
+  position:fixed;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+  opacity:0;pointer-events:none;
+  transition:opacity .32s;
+}
+.overlay.active{opacity:1;pointer-events:auto}
+
+/* ---- Splash (z 1000) ---- */
+#appLoader{
+  z-index:1000;
+  flex-direction:column;gap:22px;
+  background:radial-gradient(720px 520px at 50% 40%, var(--bg-glow) 0%, var(--bg) 70%);
+  opacity:1;pointer-events:auto;
+}
+/* Id selector, because #appLoader's own opacity:1 would otherwise win. */
+#appLoader.hidden{opacity:0;pointer-events:none}
+#appLoader .wordmark{
+  font-size:clamp(26px,9vw,44px);
+  font-weight:800;letter-spacing:.3em;
+  color:var(--accent);
+  text-shadow:0 0 26px var(--accent);
+  animation:wordPulse 1.5s ease-in-out infinite;
+}
+@keyframes wordPulse{
+  0%,100%{opacity:.55;transform:scale(.98)}
+  50%    {opacity:1;transform:scale(1.02)}
+}
+.spinner{
+  width:34px;height:34px;border-radius:50%;
+  border:2px solid var(--line);
+  border-top-color:var(--accent);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#appLoader .boot{
+  font-size:10px;letter-spacing:.24em;color:var(--muted);
+}
+
+/* ---- Mode picker (z 900) ---- */
+#modeSelectOverlay{
+  z-index:900;
+  background:rgba(6,8,12,.82);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.mode-card{
+  width:100%;max-width:380px;
+  background:var(--surface-2);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:22px 20px;
+  text-align:center;
+  transform:scale(.86);
+  transition:transform .42s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 24px 70px rgba(0,0,0,.6);
+}
+.overlay.active .mode-card{transform:scale(1)}
+.mode-card h2{
+  margin:0 0 4px;font-size:15px;letter-spacing:.2em;font-weight:700;
+}
+.mode-card p{
+  margin:0 0 18px;font-size:10px;letter-spacing:.14em;color:var(--muted);
+}
+.mode-pick{
+  display:block;width:100%;text-align:left;
+  padding:13px 15px;border-radius:12px;margin-bottom:10px;
+  border:1px solid var(--line);background:var(--surface);
+}
+.mode-pick .t{display:block;font-size:12px;font-weight:700;letter-spacing:.16em}
+.mode-pick .d{display:block;font-size:9px;letter-spacing:.1em;color:var(--muted);margin-top:4px}
+#pickConnect{border-color:#45a29e;color:#66fcf1}
+#pickConnect:hover{background:rgba(102,252,241,.10)}
+#pickSeparate{border-color:#8b2f57;color:#ff2e7e}
+#pickSeparate:hover{background:rgba(255,46,126,.10)}
+
+/* ---- Win + guide modals (z 100) ---- */
+#congratsModal,#guideModal{
+  z-index:100;
+  background:rgba(6,8,12,.78);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+}
+.modal-card{
+  width:100%;max-width:360px;max-height:82vh;overflow-y:auto;
+  background:var(--surface-2);
+  border:1px solid var(--accent-2);
+  border-radius:18px;
+  padding:22px 20px;
+  transform:translateY(14px) scale(.94);
+  transition:transform .38s cubic-bezier(0.34,1.56,0.64,1);
+  box-shadow:0 24px 70px rgba(0,0,0,.6);
+}
+.overlay.active .modal-card{transform:translateY(0) scale(1)}
+.modal-card h2{
+  margin:0 0 6px;font-size:16px;letter-spacing:.2em;font-weight:700;
+  color:var(--accent);text-align:center;
+}
+.modal-card .sub{
+  margin:0 0 16px;font-size:10px;letter-spacing:.14em;color:var(--muted);text-align:center;
+}
+.modal-card h3{
+  margin:14px 0 5px;font-size:10px;letter-spacing:.2em;color:var(--accent);
+}
+.modal-card p,.modal-card li{
+  font-size:11px;line-height:1.65;letter-spacing:.02em;color:var(--text);opacity:.88;margin:0 0 6px;
+}
+.modal-card ul{margin:0 0 6px;padding-left:16px}
+.modal-actions{display:flex;gap:8px;margin-top:18px}
+.modal-actions button{flex:1;justify-content:center;text-align:center;padding:11px}
+#congratsNextBtn{
+  color:var(--accent);border-color:var(--accent-2);background:var(--accent-soft);font-weight:700;
+}
+
+/* ---- In-board loader (z 10) ---- */
+#boardLoader{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  z-index:10;
+  background:rgba(11,12,16,.55);
+  border-radius:14px;
+  opacity:0;pointer-events:none;
+  transition:opacity .22s;
+}
+#boardLoader.active{opacity:1}
+
+/* ============================================================
+   HEADER CHROME ADDITIONS
+   ============================================================ */
+.icon-btn{padding:7px 9px;font-size:12px;line-height:1}
+#hintBtn{color:var(--accent);border-color:var(--accent-2)}
+#hintBtn.earn{color:#7ee08a;border-color:#3aa855}
+#hintBtn:disabled{color:var(--muted);border-color:var(--line);opacity:.6}
+.bar .spacer{flex:1 1 auto}
+footer .nav{
+  display:flex;align-items:center;gap:8px;width:100%;
+}
+footer .nav .mid{flex:1 1 auto;text-align:center;line-height:1.3}
+footer .nav .mid .lvl{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--text)}
+footer .nav .mid .grp{font-size:9px;letter-spacing:.14em;color:var(--muted)}
+footer .nav .credit{
+  flex:1 1 auto;text-align:center;
+  font-size:10px;letter-spacing:.18em;font-weight:700;
+  color:var(--accent);
+  text-shadow:0 0 10px var(--accent-soft),0 0 22px var(--accent-soft);
+  animation:creditPulse 1.8s ease-in-out infinite;
+  white-space:nowrap;
+}
+footer .nav .credit .heart{
+  display:inline-block;
+  color:#ff4d8d;
+  text-shadow:0 0 10px #ff4d8d,0 0 22px #ff4d8d;
+  animation:heartBeat 1.1s ease-in-out infinite;
+}
+@keyframes creditPulse{
+  0%,100%{
+    text-shadow:0 0 8px var(--accent-soft),0 0 14px var(--accent-soft);
+    transform:scale(1);
+  }
+  50%{
+    text-shadow:0 0 12px var(--accent),0 0 26px var(--accent),0 0 40px var(--accent-soft);
+    transform:scale(1.03);
+  }
+}
+@keyframes heartBeat{
+  0%,100%{transform:scale(1)}
+  30%{transform:scale(1.25)}
+  60%{transform:scale(.95)}
+}
+
+@media (max-width:420px){
+  .brand{font-size:11px;letter-spacing:.16em}
+  button{padding:7px 9px;font-size:10px}
+  .stage{padding:8px}
+}
+</style>
+</head>
+<body class="mode-light">
+
+<!-- ===== Splash (z1000) — hidden 1000ms after boot ===== -->
+<div class="overlay" id="appLoader">
+  <div class="wordmark">PULSATOR</div>
+  <div class="spinner"></div>
+  <div class="boot">INITIALIZING MATRIX...</div>
+</div>
+
+<!-- ===== Mode picker (z900) ===== -->
+<div class="overlay" id="modeSelectOverlay">
+  <div class="mode-card">
+    <h2>SELECT RULESET</h2>
+    <p>PROGRESS IS TRACKED SEPARATELY</p>
+    <button class="mode-pick" id="pickConnect">
+      <span class="t">&#9678; CONNECT</span>
+      <span class="d">EVERY ARM MUST MEET A FACING ARM</span>
+    </button>
+    <button class="mode-pick" id="pickSeparate">
+      <span class="t">&#9676; SEPARATE</span>
+      <span class="d">NO ARM MAY MEET A FACING ARM</span>
+    </button>
+  </div>
+</div>
+
+<!-- ===== Win modal (z100) ===== -->
+<div class="overlay" id="congratsModal">
+  <div class="modal-card">
+    <h2 id="congratsTitle">LEVEL CLEAR</h2>
+    <p class="sub" id="congratsSub">MATRIX STABILIZED</p>
+    <p id="congratsStats"></p>
+    <div class="modal-actions">
+      <button id="congratsStayBtn">STAY</button>
+      <button id="congratsNextBtn">PLAY NEXT LEVEL &#8594;</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Guide modal (z100) ===== -->
+<div class="overlay" id="guideModal">
+  <div class="modal-card">
+    <h2>HOW TO PLAY</h2>
+    <p class="sub">TAP A TILE TO ROTATE IT CLOCKWISE</p>
+
+    <h3>CONNECT</h3>
+    <p>Every arm must meet a facing arm on the neighbouring tile, and
+       nothing may point off the board.</p>
+
+    <h3>SEPARATE</h3>
+    <p>No arm may meet a facing arm, and nothing may point off the
+       board. Arms must end against a blank side.</p>
+
+    <h3>PROGRESSION</h3>
+    <ul>
+      <li>Five stages per group; the grid grows every few groups.</li>
+      <li>Stage 5 is the group peak.</li>
+      <li>NEXT unlocks only once the current level is solved.</li>
+    </ul>
+
+    <h3>HINTS</h3>
+    <ul>
+      <li>A hint snaps one tile to its solved rotation.</li>
+      <li>You get 3 hints on first entry into a new group.</li>
+      <li>Replaying a cleared group does not refill them.</li>
+      <li>Out of hints? The same button becomes "+ EARN HINT" and a watched ad grants +1.</li>
+    </ul>
+
+    <h3>KEYS</h3>
+    <p>&#8592; / &#8594; navigate &bull; R reset &bull; H hint &bull; M menu &bull; ESC close</p>
+
+    <div class="modal-actions">
+      <button id="guideCloseBtn">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="brand">PULSATOR</div>
+  <button class="icon-btn" id="soundToggleBtn" aria-label="Toggle sound">&#128266;</button>
+  <button class="icon-btn" id="themeToggleBtn" aria-label="Toggle appearance">&#9789; DARK</button>
+</header>
+
+<div class="bar">
+  <button id="menuBtn" aria-label="Open ruleset menu">&#127968; MENU</button>
+  <button id="guideBtn" aria-label="Open guide">&#128214; GUIDE</button>
+  <button id="hintBtn" aria-label="Use a hint">&#128161; HINT (<span id="hintCount">3</span>)</button>
+  <button id="resetBtn" aria-label="Reset level">&#128260; RESET</button>
+</div>
+
+<div class="stats" id="statsPanel">
+  <div class="stats-head" id="statsHead" role="button" tabindex="0" aria-expanded="true">
+    <span class="caret">&#9662;</span>
+    <span>DETAILS</span>
+  </div>
+  <div class="stats-body">
+    <div class="stats-grid">
+      <div class="cell">
+        <div class="cell-label">LEVEL</div>
+        <div class="cell-value" id="lvlText">LEVEL 1</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">GROUP</div>
+        <div class="cell-value" id="grpText">GROUP 1 &bull; STAGE 1/5</div>
+      </div>
+    </div>
+    <div class="stats-rest" id="statsRest">
+      <div class="stats-grid">
+        <div class="cell">
+          <div class="cell-label">BEST</div>
+          <div class="cell-value" id="best">&mdash;</div>
+        </div>
+        <div class="cell">
+          <div class="cell-label">GRID</div>
+          <div class="cell-value" id="grid">5&times;5</div>
+        </div>
+        <div class="cell cell-wide">
+          <div class="cell-label">TAPS</div>
+          <div class="cell-value" id="taps">0</div>
+        </div>
+      </div>
+      <div class="goal" id="goal">Rotate every tile until the loops close.</div>
+    </div>
+  </div>
+</div>
+
+<div class="stage" id="stage">
+  <div class="banner" id="banner">SOLVED</div>
+  <canvas id="cv" aria-label="Puzzle board"></canvas>
+  <div id="boardLoader"><div class="spinner"></div></div>
+</div>
+
+<footer>
+  <div class="nav">
+    <button id="prevBtn" aria-label="Previous level">&#9664; PREV</button>
+    <div class="credit">With <span class="heart">&#128151;</span> By GoalLineMedia</div>
+    <button id="nextBtn" aria-label="Next level" disabled>NEXT &#8594; &#128274;</button>
+  </div>
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   PULSATOR — a single-file Infinity-Loop-style puzzle.
+   Two modes:
+     LIGHT / CONNECT    close every path into seamless loops
+     DARK  / DISCONNECT sever every connection into isolation
+   Difficulty follows a 5-level sawtooth wave that resets each group.
+   ============================================================ */
+
+/* ---------- Seeded PRNG (mulberry32) -----------------------
+   Deterministic: the same level number always yields the same
+   board, so progress is reproducible without storing layouts. */
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* ---------- Geometry constants ------------------------------
+   Connectors are stored as a 4-bit mask. Bit i corresponds to
+   direction i in DX/DY order: 0=N, 1=E, 2=S, 3=W.            */
+const DX = [0, 1, 0, -1];
+const DY = [-1, 0, 1, 0];
+const BIT = [1, 2, 4, 8];
+const OPP = [2, 3, 0, 1];
+
+const idx = (x, y, n) => y * n + x;
+const inside = (x, y, n) => x >= 0 && y >= 0 && x < n && y < n;
+
+/* Rotate a connector mask clockwise by k quarter turns. */
+function rotMask(m, k){
+  k = ((k % 4) + 4) % 4;
+  return ((m << k) | (m >> (4 - k))) & 15;
+}
+function popcount(m){
+  let c = 0;
+  while(m){ c += m & 1; m >>= 1; }
+  return c;
+}
+/* Fisher-Yates over [0,1,2,3] driven by the seeded PRNG. */
+function shuffledDirs(rnd){
+  const a = [0, 1, 2, 3];
+  for(let i = 3; i > 0; i--){
+    const j = Math.floor(rnd() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* ---------- Sawtooth difficulty resolver --------------------
+   Group  G = floor((level-1)/5)+1   → grid size tier
+   Step   S = ((level-1)%5)+1        → 1 easy … 5 group peak
+   Every new group restarts at Step 1, producing the sawtooth:
+   complexity climbs to the peak, drops, then rebuilds larger. */
+function levelInfo(level){
+  const G = Math.floor((level - 1) / 5) + 1;
+  const S = ((level - 1) % 5) + 1;
+  let n;                                  // grid is n x n
+  if(G <= 2)      n = 3;
+  else if(G <= 5) n = 4;
+  else if(G <= 9) n = 5;
+  else            n = 6;                  // hard cap for performance
+  // Tile pool gate: steps 1-2 straights+bends, 3-4 adds T, 5 adds cross
+  const maxDeg = S <= 2 ? 2 : (S <= 4 ? 3 : 4);
+  const loopCap = S <= 2 ? 8 : (S <= 4 ? 14 : 36);
+  return { G: G, S: S, n: n, maxDeg: maxDeg, loopCap: loopCap };
+}
+/* ---------- Internal edge list -----------------------------
+   Every pair of orthogonally adjacent cells shares one edge.
+   Border-facing sides are deliberately never listed: a connector
+   may never point off the board in either mode.              */
+function buildEdges(n){
+  const edges = [];
+  for(let y = 0; y < n; y++){
+    for(let x = 0; x < n; x++){
+      if(x + 1 < n) edges.push({ a: idx(x, y, n), b: idx(x + 1, y, n), da: 1, db: 3 });
+      if(y + 1 < n) edges.push({ a: idx(x, y, n), b: idx(x, y + 1, n), da: 2, db: 0 });
+    }
+  }
+  return edges;
+}
+
+/* ---------- Solved-target generator ------------------------
+   Produces the per-cell connector masks of an already-solved
+   board. One routine serves both modes because they differ
+   only in how a shared edge may be consumed:
+
+     LIGHT : an edge is either used by BOTH cells (the two
+             connectors meet) or by neither.
+     DARK  : an edge may be claimed by AT MOST ONE cell, so a
+             connector always faces a blank side — total
+             isolation with nothing pointing at a border.
+
+   In both cases a cell's connector count must match a tile that
+   exists in the current pool: 0 (blank), 2 (straight/bend),
+   3 (T-junction) or 4 (cross), never more than maxDeg.        */
+function genTarget(n, maxDeg, density, rnd, dark){
+  const cells = n * n;
+  const mask = new Uint8Array(cells);
+  const deg = new Uint8Array(cells);
+  const edges = buildEdges(n);
+
+  // Deterministic shuffle of the edge list.
+  for(let i = edges.length - 1; i > 0; i--){
+    const j = Math.floor(rnd() * (i + 1));
+    const t = edges[i]; edges[i] = edges[j]; edges[j] = t;
+  }
+
+  const claim = new Int8Array(edges.length).fill(-1); // -1 = unused
+  if(dark){
+    /* ---- DARK target: every connector faces a blank side ----
+       Cells are visited in shuffled order; each grabs a legal
+       number of still-unclaimed incident edges. Because an edge
+       can only ever be claimed once, no two connectors can meet. */
+    const order = [];
+    for(let i = 0; i < cells; i++) order.push(i);
+    for(let i = cells - 1; i > 0; i--){
+      const j = Math.floor(rnd() * (i + 1));
+      const t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    // Index of incident edges per cell for quick lookup.
+    const inc = [];
+    for(let i = 0; i < cells; i++) inc.push([]);
+    for(let e = 0; e < edges.length; e++){
+      inc[edges[e].a].push(e);
+      inc[edges[e].b].push(e);
+    }
+
+    for(const c of order){
+      const free = inc[c].filter(e => claim[e] === -1);
+      // Legal connector counts are 2..maxDeg (1 has no tile, 0 = blank).
+      const cap = Math.min(maxDeg, free.length);
+      let want = 0;
+      if(cap >= 2 && rnd() < density){
+        want = 2 + Math.floor(rnd() * (cap - 1));   // 2..cap
+      }
+      if(want < 2) continue;                        // stays blank
+      // Deterministic pick of `want` free edges.
+      for(let i = free.length - 1; i > 0; i--){
+        const j = Math.floor(rnd() * (i + 1));
+        const t = free[i]; free[i] = free[j]; free[j] = t;
+      }
+      for(let k = 0; k < want; k++){
+        const e = free[k], ed = edges[e];
+        claim[e] = c;
+        const d = (ed.a === c) ? ed.da : ed.db;
+        mask[c] |= BIT[d];
+        deg[c]++;
+      }
+    }
+    return mask;
+  }
+  /* ---- LIGHT target: matched connectors, no open ends -------
+     An edge is taken by both cells at once, so connectors always
+     meet. The only illegal state is a cell of degree 1: that is
+     an open end. Degrees 0/2/3/4 map onto blank, straight-or-bend,
+     T-junction and cross respectively.                        */
+  const used = new Uint8Array(edges.length);
+  const inc = [];
+  for(let i = 0; i < cells; i++) inc.push([]);
+  for(let e = 0; e < edges.length; e++){
+    inc[edges[e].a].push(e);
+    inc[edges[e].b].push(e);
+  }
+  const other = (e, c) => (edges[e].a === c ? edges[e].b : edges[e].a);
+
+  const addEdge = (e) => {
+    used[e] = 1; deg[edges[e].a]++; deg[edges[e].b]++;
+  };
+  const dropEdge = (e) => {
+    used[e] = 0; deg[edges[e].a]--; deg[edges[e].b]--;
+  };
+
+  // Seeding pass: take edges while both ends stay within maxDeg.
+  for(let e = 0; e < edges.length; e++){
+    if(rnd() >= density) continue;
+    if(deg[edges[e].a] >= maxDeg || deg[edges[e].b] >= maxDeg) continue;
+    addEdge(e);
+  }
+
+  /* Repair pass: eliminate every degree-1 cell, either by giving
+     it a second connector or by retracting its only one. Each
+     retraction strictly reduces the edge count, so this ends. */
+  for(let guard = 0; guard < 4000; guard++){
+    let open = -1;
+    for(let c = 0; c < cells; c++){ if(deg[c] === 1){ open = c; break; } }
+    if(open === -1) break;
+    let grew = false;
+    for(const e of inc[open]){
+      if(used[e]) continue;
+      const o = other(e, open);
+      // Growing into an untouched cell would just move the problem.
+      if(deg[o] === 0 || deg[o] >= maxDeg) continue;
+      addEdge(e); grew = true; break;
+    }
+    if(!grew){
+      for(const e of inc[open]){ if(used[e]){ dropEdge(e); break; } }
+    }
+  }
+
+  for(let e = 0; e < edges.length; e++){
+    if(!used[e]) continue;
+    mask[edges[e].a] |= BIT[edges[e].da];
+    mask[edges[e].b] |= BIT[edges[e].db];
+  }
+  return mask;
+}
+/* ---------- Board construction ------------------------------
+   1. build a solved target for the requested mode
+   2. deterministically scramble by 1-3 quarter turns per tile
+   The scramble is re-rolled if it happens to land on a solved
+   state, so a fresh level is never pre-completed.             */
+function buildBoard(level, dark){
+  const info = levelInfo(level);
+  const n = info.n;
+  // Mode is folded into the seed so each mode gets its own layouts.
+  const seedBase = (level * 0x9E3779B1) ^ (dark ? 0x5bf03635 : 0x27d4eb2f);
+  let mask = null, rot = null;
+
+  for(let attempt = 0; attempt < 8; attempt++){
+    const rnd = mulberry32((seedBase + attempt * 0x85EBCA6B) >>> 0);
+    const density = 0.34 + 0.08 * info.S;          // denser toward the peak
+    mask = genTarget(n, info.maxDeg, density, rnd, dark);
+
+    // Reject a board with nothing on it at all.
+    let live = 0;
+    for(let i = 0; i < mask.length; i++) if(mask[i]) live++;
+    if(live < Math.max(3, Math.floor(n * n * 0.4))) continue;
+
+    rot = new Int8Array(n * n);
+    for(let i = 0; i < mask.length; i++){
+      // Rotation-symmetric tiles (blank, cross) cannot be scrambled.
+      const sym = (mask[i] === 0 || mask[i] === 15);
+      if(sym){ rot[i] = 0; continue; }
+      const straight = (mask[i] === 5 || mask[i] === 10);
+      // Straights repeat every 180°, so a single turn is the only change.
+      rot[i] = straight ? 1 : 1 + Math.floor(rnd() * 3);
+    }
+    const cur = new Uint8Array(n * n);
+    for(let i = 0; i < mask.length; i++) cur[i] = rotMask(mask[i], rot[i]);
+    if(!isSolved(cur, n, dark)) break;             // good scramble
+  }
+
+  const state = new Uint8Array(n * n);
+  for(let i = 0; i < mask.length; i++) state[i] = rotMask(mask[i], rot[i]);
+
+  // Last resort: if every attempt still landed on the solved arrangement,
+  // nudge the first asymmetric tile so the level always opens unsolved.
+  if(isSolved(state, n, dark)){
+    for(let i = 0; i < mask.length; i++){
+      if(mask[i] === 0 || mask[i] === 15) continue;   // rotating these changes nothing
+      rot[i] = (rot[i] + 1) % 4;
+      state[i] = rotMask(mask[i], rot[i]);
+      break;
+    }
+  }
+
+  return {
+    level: level, dark: dark, n: n, info: info,
+    base: mask,                 // solved masks, before scrambling
+    turns: rot,                 // current quarter-turn offset per tile
+    mask: state,                // live connector masks
+    anim: new Float32Array(n * n),   // displayed angle (radians)
+    target: new Float32Array(n * n), // desired angle (radians)
+    taps: 0,
+    solved: false
+  };
+}
+/* ---------- Instant win validation --------------------------
+   Runs on every tap. Both rules are a single scan of each tile's
+   four sides against its neighbour's connection matrix.
+
+   LIGHT : a connector must be met by a connector. Any connector
+           facing a border or a blank side is an open end → fail.
+   DARK  : no connector may be met by a connector, and none may
+           face an outer border → total isolation.              */
+function isSolved(mask, n, dark){
+  for(let y = 0; y < n; y++){
+    for(let x = 0; x < n; x++){
+      const m = mask[idx(x, y, n)];
+      for(let d = 0; d < 4; d++){
+        const mine = (m & BIT[d]) !== 0;
+        if(!mine) continue;
+        const nx = x + DX[d], ny = y + DY[d];
+        if(!inside(nx, ny, n)) return false;   // points off-board: illegal in both modes
+        const theirs = (mask[idx(nx, ny, n)] & BIT[OPP[d]]) !== 0;
+        if(dark ? theirs : !theirs) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/* True when this specific side is a live connection to a neighbour. */
+function isLinked(board, x, y, d){
+  if((board.mask[idx(x, y, board.n)] & BIT[d]) === 0) return false;
+  const nx = x + DX[d], ny = y + DY[d];
+  if(!inside(nx, ny, board.n)) return false;
+  return (board.mask[idx(nx, ny, board.n)] & BIT[OPP[d]]) !== 0;
+}
+
+/* ---------- Web Audio (fully programmatic, no assets) -------- */
+const Audio2 = (function(){
+  let ctx = null;
+  function ac(){
+    if(!ctx){
+      const C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      ctx = new C();
+    }
+    if(ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  /* One short enveloped oscillator burst. */
+  function tone(freq, dur, type, gain, delay){
+    const a = ac(); if(!a) return;
+    const t0 = a.currentTime + (delay || 0);
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  return { ac: ac, tone: tone };
+})();
+/* Soft mechanical click when a tile rotates. */
+function sfxClick(){
+  Audio2.tone(210 + Math.random() * 40, 0.055, "square", 0.045);
+  Audio2.tone(1150 + Math.random() * 180, 0.03, "triangle", 0.02, 0.005);
+}
+/* Ascending pentatonic run when the board completes. */
+function sfxWin(peak){
+  const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5];
+  scale.forEach(function(f, i){
+    Audio2.tone(f, 0.22, "triangle", 0.075, i * 0.075);
+  });
+  if(peak){
+    // Group peak gets a bright octave stack on top of the run.
+    Audio2.tone(1318.5, 0.55, "sine", 0.09, 0.45);
+    Audio2.tone(1975.5, 0.55, "sine", 0.05, 0.47);
+  }
+}
+/* Rising two-note chirp so a hint sounds like help, not a tap. */
+function sfxHint(){
+  Audio2.tone(523.25, 0.12, "triangle", 0.06);
+  Audio2.tone(880.0, 0.16, "triangle", 0.05, 0.09);
+}
+
+/* ---------- Persistence -------------------------------------
+   v2 keeps the two rulesets fully independent: each carries its
+   own level pointer, unlock ceiling, group high-water mark and
+   hint purse. v1's flat shape is migrated once on first boot.  */
+const STORE = "pulsator.v2";
+const STORE_V1 = "pulsator.v1";
+
+function blankMode(){
+  return { currentLevel: 1, maxUnlockedLevel: 1, maxGroupReached: 1, hints: 3, best: 0 };
+}
+/* Coerce whatever came out of storage into a complete mode record. */
+function sanitizeMode(o){
+  const m = blankMode();
+  if(!o || typeof o !== "object") return m;
+  m.currentLevel     = Math.max(1, o.currentLevel | 0);
+  m.maxUnlockedLevel = Math.max(1, o.maxUnlockedLevel | 0);
+  m.maxGroupReached  = Math.max(1, o.maxGroupReached | 0);
+  m.hints            = Math.max(0, o.hints | 0);
+  m.best             = Math.max(0, o.best | 0);
+  // A pointer past the ceiling would hand out free levels.
+  if(m.currentLevel > m.maxUnlockedLevel) m.currentLevel = m.maxUnlockedLevel;
+  return m;
+}
+/* v1 stored one level and two bests. Bests become the unlock
+   ceilings; the single level pointer goes to the mode it was
+   last played in and the other mode starts fresh.              */
+function migrateV1(v){
+  const md = { connect: blankMode(), separate: blankMode() };
+  const lvl = Math.max(1, v.level | 0);
+  md.connect.best  = Math.max(0, v.bestLight | 0);
+  md.separate.best = Math.max(0, v.bestDark | 0);
+  md.connect.maxUnlockedLevel  = md.connect.best + 1;
+  md.separate.maxUnlockedLevel = md.separate.best + 1;
+  md.connect.currentLevel  = v.dark ? 1 : lvl;
+  md.separate.currentLevel = v.dark ? lvl : 1;
+  md.connect.maxGroupReached  = levelInfo(md.connect.maxUnlockedLevel).G;
+  md.separate.maxGroupReached = levelInfo(md.separate.maxUnlockedLevel).G;
+  return { dark: !!v.dark, sound: true, lightApp: false, modeData: md };
+}
+/* The record for whichever ruleset is on screen right now. Every
+   read and write of progress goes through here, which is what
+   keeps the two rulesets from leaking into each other.          */
+function activeMode(){
+  return G.modeData[G.dark ? "separate" : "connect"];
+}
+/* Returns a complete settings object no matter what is in storage:
+   v2 if present, else a one-time migration of v1, else defaults. */
+function loadSave(){
+  try{
+    const raw = localStorage.getItem(STORE);
+    if(raw){
+      const o = JSON.parse(raw);
+      if(o && typeof o === "object"){
+        return {
+          dark: !!o.dark,
+          sound: o.sound !== false,
+          lightApp: !!o.lightApp,
+          modeData: {
+            connect: sanitizeMode(o.modeData && o.modeData.connect),
+            separate: sanitizeMode(o.modeData && o.modeData.separate)
+          }
+        };
+      }
+    }
+    const old = localStorage.getItem(STORE_V1);
+    if(old){
+      const v = JSON.parse(old);
+      if(v && typeof v === "object") return migrateV1(v);
+    }
+  }catch(e){ /* corrupt JSON or blocked storage — fall through */ }
+  return {
+    dark: false, sound: true, lightApp: false,
+    modeData: { connect: blankMode(), separate: blankMode() }
+  };
+}
+function persist(){
+  try{
+    localStorage.setItem(STORE, JSON.stringify({
+      dark: G.dark,
+      sound: G.soundEnabled,
+      lightApp: G.lightApp,
+      modeData: G.modeData
+    }));
+  }catch(e){ /* private mode / quota — the game still plays */ }
+}
+
+/* ---------- Global game state ------------------------------- */
+const G = {
+  level: 1,
+  dark: false,                 // false = CONNECT ruleset, true = SEPARATE
+  soundEnabled: true,
+  lightApp: false,             // app chrome appearance, independent of ruleset
+  modeData: { connect: blankMode(), separate: blankMode() },
+  board: null,
+  particles: [],
+  cell: 0, ox: 0, oy: 0,      // layout: cell size and board origin in CSS px
+  t: 0,                        // running clock for pulse animation
+  flash: 0,                    // full-screen glow wash amount
+  bannerTimer: 0,
+  hintIdx: -1,                 // tile index wearing the hint ring, -1 = none
+  booted: false                // true once the mode picker has been dismissed
+};
+
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+const banner = document.getElementById("banner");
+const lvlText = document.getElementById("lvlText");
+const grpText = document.getElementById("grpText");
+const goalText = document.getElementById("goal");
+const bestText = document.getElementById("best");
+const gridText = document.getElementById("grid");
+const tapsText = document.getElementById("taps");
+const statsPanel = document.getElementById("statsPanel");
+const statsHead = document.getElementById("statsHead");
+const $ = function(id){ return document.getElementById(id); };
+const appLoader = $("appLoader");
+const modeOverlay = $("modeSelectOverlay");
+const congratsModal = $("congratsModal");
+const guideModal = $("guideModal");
+const boardLoader = $("boardLoader");
+const nextBtn = $("nextBtn");
+const prevBtn = $("prevBtn");
+const hintBtn = $("hintBtn");
+const soundBtn = $("soundToggleBtn");
+const themeBtn = $("themeToggleBtn");
+/* ---------- Responsive canvas sizing ------------------------
+   The canvas is sized to the largest square that fits the stage,
+   and the backing store is scaled by devicePixelRatio so lines
+   stay crisp on high-density mobile screens. No scrollbars ever
+   appear because the stage is a flex child with min-height:0.  */
+function layout(){
+  const pad = 4;
+  const w = Math.max(120, stage.clientWidth - pad * 2);
+  const h = Math.max(120, stage.clientHeight - pad * 2);
+  const size = Math.floor(Math.min(w, h));
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+
+  cv.style.width = size + "px";
+  cv.style.height = size + "px";
+  cv.width = Math.floor(size * dpr);
+  cv.height = Math.floor(size * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const n = G.board ? G.board.n : 3;
+  const inset = Math.max(10, Math.round(size * 0.045));
+  G.cell = (size - inset * 2) / n;
+  G.ox = inset;
+  G.oy = inset;
+  G.size = size;
+}
+
+/* ---------- HUD sync ---------------------------------------- */
+function syncHud(){
+  const b = G.board;
+  lvlText.textContent = "LEVEL " + G.level;
+  grpText.textContent = "GROUP " + b.info.G + " \u2022 STAGE " + b.info.S + "/5"
+                      + (b.info.S === 5 ? " \u2022 PEAK" : "");
+  goalText.textContent = G.dark
+    ? "Sever every link \u2014 no ends may touch."
+    : "Close every path \u2014 no open ends.";
+  const md = activeMode();
+  bestText.textContent = (md.best > 0 ? md.best : "\u2014");
+  if(gridText) gridText.textContent = b.n + "\u00d7" + b.n;
+  if(tapsText) tapsText.textContent = b.taps + " TAPS";
+  document.body.classList.toggle("mode-dark", G.dark);
+  document.body.classList.toggle("mode-light", !G.dark);
+  prevBtn.disabled = G.level <= 1;
+  // NEXT stays locked until this level has actually been cleared.
+  nextBtn.disabled = G.level >= md.maxUnlockedLevel;
+  nextBtn.textContent = nextBtn.disabled ? "NEXT \u2192 \uD83D\uDD12" : "NEXT \u2192";
+  updateHintUi();
+}
+
+/* The hint purse is per-ruleset, so the label follows activeMode().
+   When the player runs out, the same button becomes "+ EARN HINT"
+   and watching a rewarded ad grants +1 to md.hints. */
+function updateHintUi(){
+  const md = activeMode();
+  const hasHints = md.hints > 0;
+  if(hasHints){
+    hintBtn.textContent = "\uD83D\uDCA1 HINT (" + md.hints + ")";
+    hintBtn.classList.remove("earn");
+    hintBtn.disabled = G.board.solved || !hintableIdx();
+  }else{
+    hintBtn.textContent = "+ EARN HINT";
+    hintBtn.classList.add("earn");
+    hintBtn.disabled = false;
+  }
+}
+
+/* ---------- Accent palette rotation -------------------------
+   Five palettes cycled by (level % 5), layered over the ruleset
+   accent. Each ruleset keeps its own hue family — CONNECT stays
+   cool, DISCONNECT stays warm — so the palette varies the shade
+   without ever muddying the mode's identity. Written inline on
+   <body>, which outranks the :root / .mode-dark declarations.  */
+const PALETTES = {
+  connect: [
+    ["#66fcf1", "#45a29e"],
+    ["#7cf5a0", "#3f9b62"],
+    ["#6fd6ff", "#3b86b5"],
+    ["#a6f7e2", "#4fa896"],
+    ["#59e0c8", "#2f8f83"]
+  ],
+  separate: [
+    ["#ff2e7e", "#8b2f57"],
+    ["#ff5f4d", "#a13a2c"],
+    ["#ff8a3d", "#a35a1e"],
+    ["#ff4fa8", "#93316a"],
+    ["#ff6b6b", "#a13d3d"]
+  ]
+};
+
+/* #rrggbb -> "r,g,b" so --accent-soft can reuse the accent hue. */
+function hexTriplet(hex){
+  const v = parseInt(hex.slice(1), 16);
+  return ((v >> 16) & 255) + "," + ((v >> 8) & 255) + "," + (v & 255);
+}
+
+function applyRandomTheme(level){
+  const set = G.dark ? PALETTES.separate : PALETTES.connect;
+  const pair = set[((level - 1) % set.length + set.length) % set.length];
+  const s = document.body.style;
+  s.setProperty("--accent", pair[0]);
+  s.setProperty("--accent-2", pair[1]);
+  s.setProperty("--accent-soft", "rgba(" + hexTriplet(pair[0]) + ",.10)");
+}
+
+/* Read the live accent colours straight from the CSS variables so
+   the canvas palette and the DOM chrome can never drift apart.  */
+function themeColors(){
+  const cs = getComputedStyle(document.body);
+  return {
+    accent: cs.getPropertyValue("--accent").trim() || "#66fcf1",
+    accent2: cs.getPropertyValue("--accent-2").trim() || "#45a29e",
+    line: cs.getPropertyValue("--line").trim() || "#243040",
+    muted: cs.getPropertyValue("--muted").trim() || "#7d8b9c"
+  };
+}
+/* ---------- Renderer ----------------------------------------
+   Each tile is drawn in its own rotated local space so the smooth
+   interpolated spin costs nothing extra. Colour semantics:
+
+   LIGHT mode  linked arms glow neon cyan; open ends stay muted.
+   DARK  mode  linked arms pulse warning magenta (the thing you
+               must remove); severed arms sink to slate blue.    */
+const SLATE = "#39506b";
+
+function drawBoard(dt){
+  const b = G.board, n = b.n, cell = G.cell;
+  const C = themeColors();
+  ctx.clearRect(0, 0, G.size, G.size);
+
+  // Faint grid so tap targets are legible on a dark background.
+  ctx.save();
+  ctx.strokeStyle = C.line;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  for(let i = 0; i <= n; i++){
+    const p = Math.round(G.ox + i * cell) + 0.5;
+    ctx.beginPath(); ctx.moveTo(p, G.oy); ctx.lineTo(p, G.oy + n * cell); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(G.ox, p); ctx.lineTo(G.ox + n * cell, p); ctx.stroke();
+  }
+  ctx.restore();
+
+  const pulse = 0.5 + 0.5 * Math.sin(G.t * 4.2);       // 0..1 warning throb
+  const arm = Math.max(3, cell * 0.115);               // stroke width
+  const hub = Math.max(3.4, cell * 0.135);             // centre node radius
+
+  for(let y = 0; y < n; y++){
+    for(let x = 0; x < n; x++){
+      const i = idx(x, y, n);
+      const m = b.mask[i];
+      if(m === 0) continue;                            // blank tile
+
+      // Advance the displayed angle toward the target (ease-out).
+      const diff = b.target[i] - b.anim[i];
+      b.anim[i] += diff * Math.min(1, dt * 14);
+      if(Math.abs(diff) < 0.0008) b.anim[i] = b.target[i];
+
+      const cx = G.ox + (x + 0.5) * cell;
+      const cy = G.oy + (y + 0.5) * cell;
+
+      /* Ring marking the tile the most recent hint corrected. Drawn
+         before the rotate() so it stays a circle in board space.   */
+      if(i === G.hintIdx){
+        ctx.save();
+        ctx.strokeStyle = "#ffffff";
+        ctx.globalAlpha = 0.5 + 0.4 * pulse;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#ffffff";
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cell * 0.4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      /* Live-link flags track the VISIBLE arms, which live in
+         the tile's local (rotated) frame. For each local side d,
+         the corresponding board-side is (d + turns) mod 4. */
+      const turns = ((b.turns[i] % 4) + 4) % 4;
+      const linked = [false, false, false, false];
+      const localMask = rotMask(m, -turns);
+      for(let d = 0; d < 4; d++){
+        if((localMask & BIT[d]) === 0) continue;
+        linked[d] = isLinked(b, x, y, (d + turns) % 4);
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(b.anim[i]);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      const reach = cell * 0.5;
+      for(let d = 0; d < 4; d++){
+        if((localMask & BIT[d]) === 0) continue;
+        const live = linked[d];
+
+        // Colour + glow depend on mode and whether the arm is live.
+        let col, glow;
+        if(G.dark){
+          if(live){
+            col = C.accent;
+            glow = 8 + 12 * pulse;                    // pulsating warning
+          }else{
+            col = SLATE; glow = 0;                    // safely isolated
+          }
+        }else{
+          if(live){
+            col = C.accent; glow = b.solved ? 20 : 11;
+          }else{
+            col = C.muted; glow = 0;                  // still an open end
+          }
+        }
+
+        ctx.strokeStyle = col;
+        ctx.lineWidth = arm;
+        ctx.shadowColor = col;
+        ctx.shadowBlur = glow;
+        if(G.dark && live) ctx.globalAlpha = 0.72 + 0.28 * pulse;
+        else ctx.globalAlpha = live ? 1 : 0.78;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        // d is a local side index in N,E,S,W order.
+        ctx.lineTo(DX[d] * reach, DY[d] * reach);
+        ctx.stroke();
+      }
+
+      // Centre hub: solid on multi-arm tiles, ring on straights.
+      const anyLive = linked[0] || linked[1] || linked[2] || linked[3];
+      const hubCol = G.dark ? (anyLive ? C.accent : SLATE)
+                            : (anyLive ? C.accent : C.muted);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = hubCol;
+      ctx.shadowColor = hubCol;
+      ctx.shadowBlur = anyLive ? (G.dark ? 6 + 10 * pulse : 10) : 0;
+      ctx.beginPath();
+      ctx.arc(0, 0, popcount(localMask) >= 3 ? hub : hub * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+/* ---------- Celebration particles ---------------------------
+   Spawned across the whole board when a group peak (Step 5) is
+   solved, giving the screen-wide burst the spec asks for.      */
+function burst(peak){
+  const b = G.board;
+  const count = peak ? 150 : 46;
+  const C = themeColors();
+  for(let k = 0; k < count; k++){
+    const ang = Math.random() * Math.PI * 2;
+    const spd = (peak ? 60 : 34) + Math.random() * (peak ? 260 : 120);
+    G.particles.push({
+      x: peak ? G.ox + Math.random() * b.n * G.cell : G.size * 0.5,
+      y: peak ? G.oy + Math.random() * b.n * G.cell : G.size * 0.5,
+      vx: Math.cos(ang) * spd,
+      vy: Math.sin(ang) * spd,
+      life: 1,
+      decay: 0.55 + Math.random() * 0.7,
+      r: 1.2 + Math.random() * (peak ? 2.8 : 1.8),
+      col: (k % 4 === 0) ? "#ffffff" : C.accent
+    });
+  }
+  if(peak) G.flash = 1;                     // full-screen glow wash
+}
+
+function drawParticles(dt){
+  if(G.flash > 0){
+    const C = themeColors();
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.5, G.flash * 0.5);
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(0, 0, G.size, G.size);
+    ctx.restore();
+    G.flash = Math.max(0, G.flash - dt * 1.6);
+  }
+  if(!G.particles.length) return;
+  ctx.save();
+  for(let i = G.particles.length - 1; i >= 0; i--){
+    const p = G.particles[i];
+    p.life -= dt * p.decay;
+    if(p.life <= 0){ G.particles.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 190 * dt;                        // gentle gravity
+    p.vx *= 0.99;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.col;
+    ctx.shadowColor = p.col;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+}
+/* ---------- Hints -------------------------------------------
+   A hint snaps one misrotated tile back onto its solved mask.
+   `base` holds the generator's solved arrangement, so unlike a
+   guessed rotation this can never undo correct player work.    */
+function hintableIdx(){
+  const b = G.board;
+  if(!b) return 0;
+  for(let i = 0; i < b.mask.length; i++){
+    // Blanks and crosses look identical at every rotation.
+    if(b.base[i] === 0 || b.base[i] === 15) continue;
+    if(b.mask[i] !== b.base[i]) return i + 1;   // 1-based so 0 means "none"
+  }
+  return 0;
+}
+function useHint(){
+  const md = activeMode();
+  const b = G.board;
+  if(md.hints <= 0 || b.solved) return;
+  const found = hintableIdx();
+  if(!found) return;
+  const i = found - 1;
+
+  // Rotate forward to the solved offset so the tween still spins the
+  // short way round rather than snapping instantly.
+  const cur = ((b.turns[i] % 4) + 4) % 4;
+  const steps = (4 - cur) % 4;
+  b.turns[i] = 0;
+  b.mask[i] = b.base[i];
+  b.target[i] += steps * Math.PI / 2;
+
+  md.hints--;
+  G.hintIdx = i;
+  if(G.soundEnabled) sfxHint();
+  persist();
+
+  const was = b.solved;
+  b.solved = isSolved(b.mask, b.n, G.dark);
+  if(b.solved && !was) onSolved();
+  syncHud();
+}
+
+/* ---------- Earn Hint (rewarded ad) --------------------------
+   Calls the hosted ad-mediation API:
+     POST /v1/reward/start  -> {adUrl, token, ...}
+     <user watches in popup>
+     POST /v1/reward/claim  -> {reward:{type,amount}} on success,
+                               {reason: "..."} on failure.
+   The API owns provider credentials and validates elapsed time
+   server-side, so the client only opens a URL and reports back.   */
+const AD_API = "https://ad-api-pcoz.onrender.com";
+const USER_ID_KEY = "pulsator.userId";
+function getUserId(){
+  let id = localStorage.getItem(USER_ID_KEY);
+  if(!id){
+    id = "u_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    try{ localStorage.setItem(USER_ID_KEY, id); }catch(e){ /* private mode */ }
+  }
+  return id;
+}
+function setEarnHintBusy(busy, label){
+  // While an ad flow is in flight, the same button that was
+  // "+ EARN HINT" is locked and shows the current step. When
+  // the flow ends, updateHintUi() restores the correct label.
+  if(busy){
+    hintBtn.disabled = true;
+    hintBtn.textContent = label || "...";
+  }else{
+    updateHintUi();
+  }
+}
+async function earnHint(){
+  if(!G.board) return;
+  setEarnHintBusy(true, "LOADING...");
+  let startRes;
+  try{
+    const r = await fetch(AD_API + "/v1/reward/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app: "pulsator", placement: "hint", userId: getUserId() })
+    });
+    if(!r.ok){
+      setEarnHintBusy(false);
+      alert("Ad not available right now (HTTP " + r.status + ")");
+      return;
+    }
+    startRes = await r.json();
+  }catch(e){
+    setEarnHintBusy(false);
+    alert("Could not reach ad server. Check your connection.");
+    return;
+  }
+
+  // Open the ad in a popup. Some browsers block popups; if so,
+  // fall back to a same-tab navigation so the user still sees it.
+  const popup = window.open(startRes.adUrl, "_blank", "noopener,noreferrer");
+  if(!popup){
+    setEarnHintBusy(false);
+    alert("Allow popups to earn hints, then try again.");
+    return;
+  }
+
+  // Wait until the popup closes (or focus returns to this window
+  // for browsers that reuse the same tab).
+  await new Promise(resolve => {
+    const tick = setInterval(() => {
+      if(popup.closed){ clearInterval(tick); resolve(); return; }
+      if(document.hasFocus()){ clearInterval(tick); resolve(); }
+    }, 250);
+    // Hard cap so a stuck popup never locks the button forever.
+    setTimeout(() => { clearInterval(tick); resolve(); }, 60000);
+  });
+
+  setEarnHintBusy(true, "CLAIMING...");
+  try{
+    const r = await fetch(AD_API + "/v1/reward/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: startRes.token, app: "pulsator" })
+    });
+    const body = await r.json();
+    if(body && body.reward){
+      const md = activeMode();
+      md.hints++;
+      persist();
+      syncHud();
+      setEarnHintBusy(false);
+      // Use the existing banner as a success toast.
+      const banner = $("banner");
+      if(banner){
+        banner.textContent = "+1 HINT!";
+        banner.classList.add("active");
+        setTimeout(() => banner.classList.remove("active"), 1500);
+      }
+    }else{
+      setEarnHintBusy(false);
+      const reason = (body && body.reason) || "unknown";
+      const msg = reason === "too_fast"        ? "Please watch the full ad before claiming."
+                : reason === "expired"         ? "Ad session expired. Try again."
+                : reason === "already_claimed" ? "This ad was already claimed."
+                : reason === "app_mismatch"     ? "Ad does not belong to this app."
+                : "Could not grant hint (" + reason + ")";
+      alert(msg);
+    }
+  }catch(e){
+    setEarnHintBusy(false);
+    alert("Could not reach ad server to claim reward.");
+  }
+}
+
+/* ---------- Interaction ------------------------------------- */
+function rotateAt(x, y){
+  const b = G.board;
+  if(!inside(x, y, b.n)) return;
+  const i = idx(x, y, b.n);
+  if(b.mask[i] === 0) return;               // blank tiles do nothing
+
+  b.turns[i] = (b.turns[i] + 1) % 4;
+  b.mask[i] = rotMask(b.base[i], b.turns[i]);
+  b.target[i] += Math.PI / 2;               // keeps spinning forward, never snaps back
+  b.taps++;
+  sfxClick();
+
+  const was = b.solved;
+  b.solved = isSolved(b.mask, b.n, G.dark);
+  if(b.solved && !was) onSolved();
+  syncHud();
+}
+
+function onSolved(){
+  const b = G.board;
+  const md = activeMode();
+  const peak = b.info.S === 5;
+  sfxWin(peak);
+  burst(peak);
+  banner.textContent = peak ? "GROUP " + b.info.G + " CLEARED" : "SOLVED";
+  banner.classList.add("show");
+  G.bannerTimer = 1.5;
+  G.hintIdx = -1;
+
+  md.best = Math.max(md.best, G.level);
+  // Only a first clear moves the ceiling; replaying an old level must not.
+  if(G.level >= md.maxUnlockedLevel){
+    md.maxUnlockedLevel = G.level + 1;
+    const nextGroup = levelInfo(md.maxUnlockedLevel).G;
+    // Reaching a brand-new group tops the hint purse back up.
+    if(nextGroup > md.maxGroupReached){
+      md.maxGroupReached = nextGroup;
+      md.hints = 3;
+    }
+  }
+  persist();
+  syncHud();
+
+  // The congrats modal replaces auto-advance: the player chooses when to move on.
+  setTimeout(function(){ showCongrats(peak); }, 300);
+}
+
+/* ---------- Congrats modal ---------------------------------- */
+function showCongrats(peak){
+  const b = G.board;
+  $("congratsTitle").textContent = peak ? "GROUP " + b.info.G + " CLEAR" : "LEVEL CLEAR";
+  $("congratsSub").textContent = peak
+    ? "PEAK STAGE STABILIZED \u2014 GRID EXPANDS"
+    : "MATRIX STABILIZED IN " + b.taps + " TAPS";
+  congratsModal.classList.add("active");
+}
+function hideCongrats(){
+  congratsModal.classList.remove("active");
+}
+
+function pointerToCell(ev){
+  const r = cv.getBoundingClientRect();
+  const px = ev.clientX - r.left;
+  const py = ev.clientY - r.top;
+  return {
+    x: Math.floor((px - G.ox) / G.cell),
+    y: Math.floor((py - G.oy) / G.cell)
+  };
+}
+
+cv.addEventListener("pointerdown", function(ev){
+  ev.preventDefault();
+  Audio2.ac();                              // unlock audio on first gesture
+  if(G.board.solved) return;                // ignore taps during the win beat
+  const c = pointerToCell(ev);
+  rotateAt(c.x, c.y);
+});
+/* ---------- Level flow -------------------------------------- */
+function go(level){
+  hideCongrats();
+  const md = activeMode();
+  // Clamp to the unlock ceiling so no navigation path can skip ahead.
+  G.level = Math.min(Math.max(1, level | 0), md.maxUnlockedLevel);
+  md.currentLevel = G.level;
+  G.hintIdx = -1;
+  applyRandomTheme(G.level);
+  G.board = buildBoard(G.level, G.dark);
+
+  // Seed the animation angles from the scramble so tiles start still.
+  for(let i = 0; i < G.board.mask.length; i++){
+    const a = G.board.turns[i] * Math.PI / 2;
+    G.board.anim[i] = a;
+    G.board.target[i] = a;
+  }
+  G.particles.length = 0;
+  G.flash = 0;
+  banner.classList.remove("show");
+  layout();
+  syncHud();
+  persist();
+}
+
+document.getElementById("nextBtn").addEventListener("click", function(){ go(G.level + 1); });
+document.getElementById("prevBtn").addEventListener("click", function(){ go(G.level - 1); });
+document.getElementById("resetBtn").addEventListener("click", function(){ go(G.level); });
+// Keyboard parity for desktop play.
+window.addEventListener("keydown", function(ev){
+  if(ev.key === "ArrowRight") go(G.level + 1);
+  else if(ev.key === "ArrowLeft") go(G.level - 1);
+  else if(ev.key === "r" || ev.key === "R") go(G.level);
+  else if(ev.key === "m" || ev.key === "M") $("menuBtn").click();
+  else if(ev.key === "h" || ev.key === "H") hintBtn.click();
+});
+
+/* ---------- Stats panel collapse ----------------------------
+   The panel under the header is the source of truth for best /
+   grid / taps / goal. Players can fold it away to give the
+   board more room; the choice is remembered across sessions.   */
+const STATS_COLLAPSED_KEY = "pulsator.statsCollapsed";
+function setStatsCollapsed(collapsed){
+  if(!statsPanel) return;
+  statsPanel.classList.toggle("collapsed", !!collapsed);
+  if(statsHead) statsHead.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  try{ localStorage.setItem(STATS_COLLAPSED_KEY, collapsed ? "1" : "0"); }catch(e){ /* private mode */ }
+}
+function toggleStatsPanel(){
+  if(!statsPanel) return;
+  setStatsCollapsed(!statsPanel.classList.contains("collapsed"));
+}
+if(statsHead){
+  statsHead.addEventListener("click", toggleStatsPanel);
+  statsHead.addEventListener("keydown", function(ev){
+    if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); toggleStatsPanel(); }
+  });
+}
+try{
+  if(localStorage.getItem(STATS_COLLAPSED_KEY) === "1") setStatsCollapsed(true);
+}catch(e){ /* private mode */ }
+
+window.addEventListener("resize", layout);
+window.addEventListener("orientationchange", function(){ setTimeout(layout, 120); });
+
+/* ---------- Main loop --------------------------------------- */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  G.t += dt;
+
+  if(G.bannerTimer > 0){
+    G.bannerTimer -= dt;
+    if(G.bannerTimer <= 0) banner.classList.remove("show");
+  }
+
+  drawBoard(dt);
+  drawParticles(dt);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Shell wiring ------------------------------------ */
+/* Selecting a ruleset is also the first user gesture, so it is the
+   right moment to create the AudioContext under autoplay policy.  */
+function pickMode(dark){
+  G.dark = dark;
+  G.booted = true;
+  modeOverlay.classList.remove("active");
+  Audio2.ac();
+  if(G.soundEnabled) sfxHint();
+  const md = activeMode();
+  persist();
+  go(md.currentLevel);
+}
+$("pickConnect").addEventListener("click", function(){ pickMode(false); });
+$("pickSeparate").addEventListener("click", function(){ pickMode(true); });
+
+$("menuBtn").addEventListener("click", function(){
+  hideCongrats();
+  modeOverlay.classList.add("active");
+});
+$("guideBtn").addEventListener("click", function(){ guideModal.classList.add("active"); });
+$("guideCloseBtn").addEventListener("click", function(){ guideModal.classList.remove("active"); });
+
+hintBtn.addEventListener("click", function(){
+  const md = activeMode();
+  if(md.hints > 0) useHint();
+  else earnHint();
+});
+$("congratsStayBtn").addEventListener("click", hideCongrats);
+$("congratsNextBtn").addEventListener("click", function(){ go(G.level + 1); });
+
+soundBtn.addEventListener("click", function(){
+  G.soundEnabled = !G.soundEnabled;
+  soundBtn.innerHTML = G.soundEnabled ? "&#128266;" : "&#128263;";
+  persist();
+});
+themeBtn.addEventListener("click", function(){
+  G.lightApp = !G.lightApp;
+  document.body.classList.toggle("light-mode", G.lightApp);
+  themeBtn.innerHTML = G.lightApp ? "&#9728; LIGHT" : "&#9789; DARK";
+  persist();
+});
+
+/* ---------- Boot -------------------------------------------- */
+(function init(){
+  const s = loadSave();
+  G.dark = s.dark;
+  G.soundEnabled = s.sound;
+  G.lightApp = s.lightApp;
+  G.modeData = s.modeData;
+  G.level = activeMode().currentLevel;
+
+  document.body.classList.toggle("light-mode", G.lightApp);
+  soundBtn.innerHTML = G.soundEnabled ? "&#128266;" : "&#128263;";
+  themeBtn.innerHTML = G.lightApp ? "&#9728; LIGHT" : "&#9789; DARK";
+
+  go(G.level);
+  requestAnimationFrame(frame);
+
+  // Splash holds briefly, then hands over to the ruleset picker.
+  setTimeout(function(){
+    appLoader.classList.add("hidden");
+    modeOverlay.classList.add("active");
+  }, 1000);
+})();
+</script>
+</body>
+</html>
+

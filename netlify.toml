@@ -1,16 +1,22 @@
-# Netlify config for hosting unity-rewarded.html static page
+# Netlify config for hosting pulsator.html game
 [build]
   command = "echo 'No build step needed'"
-  publish = "src/main/resources/static"
+  publish = "."
 
 [[headers]]
-  for = "/unity-rewarded.html"
+  for = "/pulsator.html"
   [headers.values]
     X-Frame-Options = "ALLOWALL"
-    Content-Security-Policy = "frame-ancestors *; script-src 'self' 'unsafe-inline' https://webads.unityads.unity3d.com; connect-src 'self' https://*.unityads.unity3d.com https://*.unity3d.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'"
+    Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://ad-api-pcoz.onrender.com; connect-src 'self' https://ad-api-pcoz.onrender.com wss:; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' https://*.netlify.app; frame-ancestors *"
 
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "ALLOWALL"
     Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=3600"
+
+[[redirects]]
+  from = "/"
+  to = "/pulsator.html"
+  status = 200
